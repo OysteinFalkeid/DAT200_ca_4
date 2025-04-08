@@ -1,8 +1,0 @@
-04/08/2025 12:44:00 - INFO   : reding test file 
-04/08/2025 12:44:00 - INFO   : reding training file 
-04/08/2025 12:44:00 - WARNING: pairplot.png file exist skipping pair plot 
-04/08/2025 12:55:43 - INFO   : reding training file 
-04/08/2025 12:55:44 - INFO   : reding test file 
-04/08/2025 12:55:44 - WARNING: pairplot.png file exist skipping pair plot 
-04/08/2025 12:55:44 - INFO   : converting to numpy array 
-04/08/2025 12:55:44 - INFO   : normalizing data 
