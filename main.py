@@ -37,11 +37,11 @@ def main(cwd_path: Path, logger: logging.Logger) -> None:
 
     # region reading from file
     logger.info("reding training file")
-    df_train = pd.read_csv(train_data_path)
-    df_train["class"] = df_train["class"].map({"GALAXY": 0, "STAR": 1, "QSO": 2})
+    df_train = pd.read_csv(train_data_path).drop(["obj_ID", "run_ID", "rerun_ID", "cam_col", "field_ID", "spec_obj_ID", "plate", "MJD", "fiber_ID"], axis=1)
+    df_train["class"] = df_train["class"].map({"GALAXY": 0, "QSO": 1, "STAR": 2})
     logger.info("remapping of class data {\"GALAXY\": 0, \"STAR\": 1, \"QSO\": 2}")
     logger.info("reding test file")
-    df_test = pd.read_csv(test_data_path)
+    df_test = pd.read_csv(test_data_path).drop(["obj_ID", "run_ID", "rerun_ID", "cam_col", "field_ID", "spec_obj_ID", "plate", "MJD", "fiber_ID"], axis=1)
 
     # df_nan_values = df_train[df_train.isna().any(axis=1)]
     # print(len(df_nan_values))
@@ -57,12 +57,15 @@ def main(cwd_path: Path, logger: logging.Logger) -> None:
         pairplot.savefig(cwd_path / Path(pairplot_file))
         plt.clf()
     
+    pca = PCA()
+    df_pca = pd.DataFrame(pca.fit_transform(df_train.drop("class", axis=1).dropna().to_numpy()))
+    print(pca.explained_variance_)
+    explained_variance = str(pca.explained_variance_)
+    logger.info("explained_variance %s", explained_variance)
     if os.path.isfile(cwd_path / Path(pairplot_PCA_file)):
         logger.warning("%s file exist skipping pair plot", pairplot_PCA_file)
     else:
         logger.info("plotting pairplot PCA")
-        pca = PCA()
-        df_pca = pd.DataFrame(pca.fit_transform(df_train.drop("class", axis=1).dropna().to_numpy()))
         df_pca["class"] = df_train.dropna()["class"].to_numpy()
         pairplot = sns.pairplot(df_pca.sample(1000), hue="class", height=2.0)
         logger.info("saving plot to file %s", pairplot_PCA_file)
@@ -99,7 +102,7 @@ def main(cwd_path: Path, logger: logging.Logger) -> None:
     logger.info("creating pipeline")
     pipeline = Pipeline([
         ('scaling',             StandardScaler()),
-        ('preprocessoer',   PCA(n_components=11)),
+        ('preprocessoer',   PCA(n_components=5)),
         ('classifier',          svm.SVC())
     ])
     # endregion 
@@ -112,22 +115,22 @@ def main(cwd_path: Path, logger: logging.Logger) -> None:
     else:
         logger.info("creating grid search")
         logger.info("setting upp parameters")
-        param_SVC_C = np.logspace(-2,2,10).tolist()
+        param_SVC_C = np.logspace(-2,3,50).tolist()
         param_RFC_n_estimator = np.linspace(10, 50,10).astype(int).tolist()
-        param_RFC_max_depth = np.linspace(2, 25, 5).astype(int).tolist()
+        param_RFC_max_depth = np.linspace(2, 50, 10).astype(int).tolist()
         param_KNN_n_neighbors = np.linspace(2, 10, 8).astype(int).tolist()
 
         param_grid = [
-            # {
-            #     'classifier': [svm.SVC()],
-            #     'classifier__C': param_SVC_C,
-            #     'classifier__kernel': ['rbf', 'linear', 'poly'],
-            # },
-            # {
-            #     'classifier': [RandomForestClassifier()],
-            #     'classifier__n_estimators': param_RFC_n_estimator,
-            #     'classifier__max_depth': param_RFC_max_depth
-            # },
+            {
+                'classifier': [svm.SVC()],
+                'classifier__C': param_SVC_C,
+                'classifier__kernel': ['rbf', 'linear', 'poly'],
+            },
+            {
+                'classifier': [RandomForestClassifier()],
+                'classifier__n_estimators': param_RFC_n_estimator,
+                'classifier__max_depth': param_RFC_max_depth
+            },
             {
                 'classifier': [LogisticRegression()],
                 'classifier__C': param_SVC_C,
@@ -136,7 +139,6 @@ def main(cwd_path: Path, logger: logging.Logger) -> None:
             {
                 'classifier': [KNeighborsClassifier()],
                 'classifier__n_neighbors': param_KNN_n_neighbors,
-
             }
         ]
 
@@ -189,7 +191,7 @@ def main(cwd_path: Path, logger: logging.Logger) -> None:
     y_pred = grid_search_cv.predict(test_np_array)
     logger.info("saving submition to file")
     df_y_pred = pd.DataFrame(y_pred, columns=["class"])
-    df_y_pred.to_csv(kaggle_path)
+    df_y_pred.to_csv(kaggle_path, index_label="ID")
     # endregion
 
 
