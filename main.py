@@ -32,6 +32,7 @@ def main(cwd_path: Path, logger: logging.Logger) -> None:
     random_state = 42
     grid_search_cv_file = 'grid_search_cv.pkl'
     grid_search_cv_path = cwd_path / Path(grid_search_cv_file)
+    kaggle_path = cwd_path / Path("kaggle_submition.csv")
     # endregion 
 
     # region reading from file
@@ -76,7 +77,7 @@ def main(cwd_path: Path, logger: logging.Logger) -> None:
 
     train_np_array = df_train.dropna().drop("class", axis=1).to_numpy()
     train_class_np_array = df_train.dropna()["class"].to_numpy()
-    test_np_array = df_test.dropna().to_numpy()
+    test_np_array = df_test.fillna(df_test.mean()).to_numpy()
     # endregion 
 
     # region spliting data for training
@@ -117,20 +118,20 @@ def main(cwd_path: Path, logger: logging.Logger) -> None:
         param_KNN_n_neighbors = np.linspace(2, 10, 8).astype(int).tolist()
 
         param_grid = [
-            {
-                'classifier': [svm.SVC()],
-                'classifier__C': param_SVC_C,
-                'classifier__kernel': ['rbf', 'linear', 'poly'],
-            },
-            {
-                'classifier': [RandomForestClassifier()],
-                'classifier__n_estimators': param_RFC_n_estimator,
-                'classifier__max_depth': param_RFC_max_depth
-            },
+            # {
+            #     'classifier': [svm.SVC()],
+            #     'classifier__C': param_SVC_C,
+            #     'classifier__kernel': ['rbf', 'linear', 'poly'],
+            # },
+            # {
+            #     'classifier': [RandomForestClassifier()],
+            #     'classifier__n_estimators': param_RFC_n_estimator,
+            #     'classifier__max_depth': param_RFC_max_depth
+            # },
             {
                 'classifier': [LogisticRegression()],
                 'classifier__C': param_SVC_C,
-                'classifier__kernel': ['lbfgs', 'newton-cg', 'newton-cholesky'],
+                'classifier__solver': ['lbfgs', 'newton-cg', 'newton-cholesky'],
             },
             {
                 'classifier': [KNeighborsClassifier()],
@@ -171,12 +172,24 @@ def main(cwd_path: Path, logger: logging.Logger) -> None:
     )
 
     x_train, x_test, y_train, y_test =  train_test_split
+    logger.info("preforming fitting of best pipeline for 60/40 split")
     grid_search_cv.best_estimator_.fit(x_train, y_train)
+    logger.info("predicting total score")
     y_pred = grid_search_cv.predict(x_test)
     print(grid_search_cv.best_estimator_.score(x_test, y_test))
     print(metrics.confusion_matrix(y_test, y_pred))
     print(metrics.f1_score(y_test, y_pred, average='macro'))
 
+    # endregion
+
+    # region kaggel submition
+    logger.info("preforming fit for best pipeline on all training data")
+    grid_search_cv.best_estimator_.fit(train_np_array, train_class_np_array)
+    logger.info("predicting test data for kaggel submition")
+    y_pred = grid_search_cv.predict(test_np_array)
+    logger.info("saving submition to file")
+    df_y_pred = pd.DataFrame(y_pred, columns=["class"])
+    df_y_pred.to_csv(kaggle_path)
     # endregion
 
 
