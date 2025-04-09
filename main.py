@@ -9,7 +9,7 @@ import os
 from sklearn import svm
 from sklearn.linear_model import Perceptron, LogisticRegression, SGDClassifier
 from sklearn import model_selection
-from sklearn.model_selection import GridSearchCV
+from sklearn.model_selection import GridSearchCV,RandomizedSearchCV
 from sklearn import metrics
 from sklearn.preprocessing import StandardScaler, LabelEncoder
 from sklearn.decomposition import PCA, KernelPCA
@@ -17,6 +17,9 @@ from sklearn.pipeline import Pipeline
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.ensemble import RandomForestClassifier
+
+
+
 import pickle
 
 def main(cwd_path: Path, logger: logging.Logger) -> None:
@@ -25,6 +28,7 @@ def main(cwd_path: Path, logger: logging.Logger) -> None:
     test_data_path = cwd_path / Path("test.csv")
     train_data_path = cwd_path / Path("train.csv")
     pairplot_file = "pairplot.png"
+    pairplot_PCA_file = "pairplot_PCA.png"
     random_state = 42
     grid_search_cv_file = 'grid_search_cv.pkl'
     grid_search_cv_path = cwd_path / Path(grid_search_cv_file)
@@ -47,10 +51,24 @@ def main(cwd_path: Path, logger: logging.Logger) -> None:
         logger.warning("%s file exist skipping pair plot", pairplot_file)
     else:
         logger.info("plotting pairplot")
-        pairplot = sns.pairplot(df_train.sample(100), hue="class", height=2.0)
+        pairplot = sns.pairplot(df_train.sample(1000), hue="class", height=2.0)
         logger.info("saving plot to file %s", pairplot_file)
-        pairplot.savefig(cwd_path / Path("pairplot.png"))
+        pairplot.savefig(cwd_path / Path(pairplot_file))
         plt.clf()
+    
+    if os.path.isfile(cwd_path / Path(pairplot_PCA_file)):
+        logger.warning("%s file exist skipping pair plot", pairplot_PCA_file)
+    else:
+        logger.info("plotting pairplot PCA")
+        pca = PCA()
+        df_pca = pd.DataFrame(pca.fit_transform(df_train.drop("class", axis=1).dropna().to_numpy()))
+        df_pca["class"] = df_train.dropna()["class"].to_numpy()
+        pairplot = sns.pairplot(df_pca.sample(1000), hue="class", height=2.0)
+        logger.info("saving plot to file %s", pairplot_PCA_file)
+        pairplot.savefig(cwd_path / Path(pairplot_PCA_file))
+        plt.clf()
+
+
     # endregion 
 
     # region exstracting data as nupy array
@@ -67,26 +85,25 @@ def main(cwd_path: Path, logger: logging.Logger) -> None:
     train_test_split =  model_selection.train_test_split(
         train_np_array, 
         train_class_np_array, 
-        test_size=0.8, 
+        test_size=0.7, 
         random_state=random_state
     )
 
     x_train, x_test, y_train, y_test =  train_test_split
 
-    # x_train, y_train = (train_np_array, train_class_np_array)
+    x_train, y_train = (train_np_array, train_class_np_array)
     # endregion 
 
     # region setting upp a pipeline
     logger.info("creating pipeline")
     pipeline = Pipeline([
         ('scaling',             StandardScaler()),
-        ('preprocessoer',   PCA(n_components=8)),
+        ('preprocessoer',   PCA(n_components=11)),
         ('classifier',          svm.SVC())
     ])
     # endregion 
 
     # region setting upp grid search
-
     if os.path.isfile(grid_search_cv_path):
         logger.info("found grid_search_cv file. loading from file.")
         with open(grid_search_cv_path, 'rb') as f:
@@ -94,22 +111,31 @@ def main(cwd_path: Path, logger: logging.Logger) -> None:
     else:
         logger.info("creating grid search")
         logger.info("setting upp parameters")
-        param_SVC_C = np.logspace(-3,3,10).tolist()
-        param_SVC_gamma = np.logspace(-3,2,10).tolist()
+        param_SVC_C = np.logspace(-2,2,10).tolist()
         param_RFC_n_estimator = np.linspace(10, 50,10).astype(int).tolist()
         param_RFC_max_depth = np.linspace(2, 25, 5).astype(int).tolist()
+        param_KNN_n_neighbors = np.linspace(2, 10, 8).astype(int).tolist()
 
         param_grid = [
             {
                 'classifier': [svm.SVC()],
                 'classifier__C': param_SVC_C,
-                'classifier__kernel': ['rbf'],
-                'classifier__gamma': param_SVC_gamma
+                'classifier__kernel': ['rbf', 'linear', 'poly'],
             },
             {
                 'classifier': [RandomForestClassifier()],
                 'classifier__n_estimators': param_RFC_n_estimator,
                 'classifier__max_depth': param_RFC_max_depth
+            },
+            {
+                'classifier': [LogisticRegression()],
+                'classifier__C': param_SVC_C,
+                'classifier__kernel': ['lbfgs', 'newton-cg', 'newton-cholesky'],
+            },
+            {
+                'classifier': [KNeighborsClassifier()],
+                'classifier__n_neighbors': param_KNN_n_neighbors,
+
             }
         ]
 
@@ -117,7 +143,7 @@ def main(cwd_path: Path, logger: logging.Logger) -> None:
         grid_search_cv = GridSearchCV(
             estimator=pipeline,
             param_grid=param_grid,
-            cv=2,
+            cv=5,
             n_jobs=-1,
             verbose=3
         )
@@ -131,6 +157,27 @@ def main(cwd_path: Path, logger: logging.Logger) -> None:
     best_params = str(grid_search_cv.best_params_)
     print(f"best score was {best_score}")
     print(f"best parameters was {best_params}")
+
+    #endregion
+
+    # region visualising result
+    logger.info("splitting X_train_standardized for training")
+
+    train_test_split =  model_selection.train_test_split(
+        train_np_array, 
+        train_class_np_array, 
+        test_size=0.4, 
+        random_state=random_state
+    )
+
+    x_train, x_test, y_train, y_test =  train_test_split
+    grid_search_cv.best_estimator_.fit(x_train, y_train)
+    y_pred = grid_search_cv.predict(x_test)
+    print(grid_search_cv.best_estimator_.score(x_test, y_test))
+    print(metrics.confusion_matrix(y_test, y_pred))
+    print(metrics.f1_score(y_test, y_pred, average='macro'))
+
+    # endregion
 
 
 

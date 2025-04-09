@@ -1,4 +1,5 @@
 .venv
 logg.txt
-grid_search_cv.pkl
+grid_search_cv*
 pairplot.png
+pairplot_PCA.png
