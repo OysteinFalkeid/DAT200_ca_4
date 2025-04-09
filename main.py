@@ -82,8 +82,8 @@ def main(cwd_path: Path, logger: logging.Logger) -> None:
 
     # region setting upp grid search
     logger.info("setting upp parameters")
-    param_range_C = np.logspace(-3,3,10).tolist()
-    param_range_gamma = np.logspace(-3,2,10).tolist()
+    param_range_C = np.logspace(-3,3,2).tolist()
+    param_range_gamma = np.logspace(-3,2,2).tolist()
 
     param_grid = [
         {
@@ -101,15 +101,17 @@ def main(cwd_path: Path, logger: logging.Logger) -> None:
     grid_search_cv = GridSearchCV(
         estimator=pipeline,
         param_grid=param_grid,
-        cv=10,
+        cv=2,
         n_jobs=-1,
-        verbose=2
+        verbose=3
     )
 
     logger.info("fitting grid search to training set. this might take a long time")
     grid_search_cv.fit(x_train, y_train)
-    logger.info("best score was $s", str(grid_search_cv.best_score_))
-    logger.info("best parameters was $s", str(grid_search_cv.best_params_))
+    best_score = str(grid_search_cv.best_score_)
+    best_params = str(grid_search_cv.best_params_)
+    # logger.info("best score was $s", best_score)
+    # logger.info("best parameters was $s", best_params)
     # endregion
 
     # region running pipeline
