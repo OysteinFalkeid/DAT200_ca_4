@@ -1,2 +1,3 @@
 .venv
 logg.txt
+grid_search_cv.pkl

@@ -16,7 +16,8 @@ from sklearn.decomposition import PCA, KernelPCA
 from sklearn.pipeline import Pipeline
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
 from sklearn.neighbors import KNeighborsClassifier
-
+from sklearn.ensemble import RandomForestClassifier
+import pickle
 
 def main(cwd_path: Path, logger: logging.Logger) -> None:
     logger.info("-------------------------------------------------------------------------")
@@ -25,6 +26,8 @@ def main(cwd_path: Path, logger: logging.Logger) -> None:
     train_data_path = cwd_path / Path("train.csv")
     pairplot_file = "pairplot.png"
     random_state = 42
+    grid_search_cv_file = 'grid_search_cv.pkl'
+    grid_search_cv_path = cwd_path / Path(grid_search_cv_file)
     # endregion 
 
     # region reading from file
@@ -69,65 +72,63 @@ def main(cwd_path: Path, logger: logging.Logger) -> None:
     )
 
     x_train, x_test, y_train, y_test =  train_test_split
+
+    # x_train, y_train = (train_np_array, train_class_np_array)
     # endregion 
 
     # region setting upp a pipeline
     logger.info("creating pipeline")
     pipeline = Pipeline([
         ('scaling',             StandardScaler()),
-        ('preprocessoer_pca',   PCA(n_components=4)),
-        ('svc',          svm.SVC())
+        ('preprocessoer',   PCA(n_components=8)),
+        ('classifier',          svm.SVC())
     ])
     # endregion 
 
     # region setting upp grid search
-    logger.info("setting upp parameters")
-    param_range_C = np.logspace(-3,3,2).tolist()
-    param_range_gamma = np.logspace(-3,2,2).tolist()
 
-    param_grid = [
-        {
-            'svc__C': param_range_C,
-            'svc__kernel': ['linear']
-        },
-        {
-            'svc__C': param_range_C,
-            'svc__kernel': ['rbf'],
-            'svc__gamma': param_range_gamma
-        }
-    ]
+    if os.path.isfile(grid_search_cv_path):
+        with open(grid_search_cv_path, 'rb') as f:
+            grid_search_cv = pickle.load(f)
+    else:
+        logger.info("setting upp parameters")
+        param_SVC_C = np.logspace(-3,3,10).tolist()
+        param_SVC_gamma = np.logspace(-3,2,10).tolist()
+        param_RFC_n_estimator = np.linspace(10, 50,10).astype(int).tolist()
+        param_RFC_max_depth = np.linspace(2, 25, 5).astype(int).tolist()
 
-    logger.info("defining grid search using param_grid")
-    grid_search_cv = GridSearchCV(
-        estimator=pipeline,
-        param_grid=param_grid,
-        cv=2,
-        n_jobs=-1,
-        verbose=3
-    )
+        param_grid = [
+            {
+                'classifier': [svm.SVC()],
+                'classifier__C': param_SVC_C,
+                'classifier__kernel': ['rbf'],
+                'classifier__gamma': param_SVC_gamma
+            },
+            {
+                'classifier': [RandomForestClassifier()],
+                'classifier__n_estimators': param_RFC_n_estimator,
+                'classifier__max_depth': param_RFC_max_depth
+            }
+        ]
 
-    logger.info("fitting grid search to training set. this might take a long time")
-    grid_search_cv.fit(x_train, y_train)
+        logger.info("defining grid search using param_grid")
+        grid_search_cv = GridSearchCV(
+            estimator=pipeline,
+            param_grid=param_grid,
+            cv=2,
+            n_jobs=-1,
+            verbose=3
+        )
+
+        logger.info("fitting grid search to training set. this might take a long time")
+        grid_search_cv.fit(x_train, y_train)
+        with open(grid_search_cv_path, 'wb') as f:
+            pickle.dump(grid_search_cv, f)
     best_score = str(grid_search_cv.best_score_)
     best_params = str(grid_search_cv.best_params_)
-    # logger.info("best score was $s", best_score)
-    # logger.info("best parameters was $s", best_params)
-    # endregion
+    print(f"best score was {best_score}")
+    print(f"best parameters was {best_params}")
 
-    # region running pipeline
-    # # Fit the pipeline on training data
-    # logger.info("fitting pippeline to training split")
-    # pipeline.fit(x_train, y_train)
-
-    # # Make predictions
-    # predictions = pipeline.predict(x_test)
-
-    # # Evaluate the model
-    # train_accuracy = pipeline.score(x_train, y_train)
-    # print(f"train_accuracy: {train_accuracy}")
-    # test_accuracy  = pipeline.score(x_test, y_test)
-    # print(f"test_accuracy: {test_accuracy}")
-    # endregion 
 
 
 
