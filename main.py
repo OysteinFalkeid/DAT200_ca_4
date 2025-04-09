@@ -88,9 +88,11 @@ def main(cwd_path: Path, logger: logging.Logger) -> None:
     # region setting upp grid search
 
     if os.path.isfile(grid_search_cv_path):
+        logger.info("found grid_search_cv file. loading from file.")
         with open(grid_search_cv_path, 'rb') as f:
             grid_search_cv = pickle.load(f)
     else:
+        logger.info("creating grid search")
         logger.info("setting upp parameters")
         param_SVC_C = np.logspace(-3,3,10).tolist()
         param_SVC_gamma = np.logspace(-3,2,10).tolist()
@@ -122,6 +124,7 @@ def main(cwd_path: Path, logger: logging.Logger) -> None:
 
         logger.info("fitting grid search to training set. this might take a long time")
         grid_search_cv.fit(x_train, y_train)
+        logger.info("dumping grid_search_cv to pickle file")
         with open(grid_search_cv_path, 'wb') as f:
             pickle.dump(grid_search_cv, f)
     best_score = str(grid_search_cv.best_score_)
@@ -180,5 +183,5 @@ def logger_init(cwd_path: Path, logger_level, toterm: bool = False) -> logging.L
 
 if __name__ == "__main__":
     cwd_path = Path(__file__).parent
-    logger = logger_init(cwd_path, logging.INFO, toterm=True)
+    logger = logger_init(cwd_path, logging.INFO, toterm=False)
     main(cwd_path, logger)
