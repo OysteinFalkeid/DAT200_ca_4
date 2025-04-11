@@ -12,11 +12,12 @@ from sklearn import model_selection
 from sklearn.model_selection import GridSearchCV,RandomizedSearchCV
 from sklearn import metrics
 from sklearn.preprocessing import StandardScaler, LabelEncoder
-from sklearn.decomposition import PCA, KernelPCA
+from sklearn.decomposition import PCA
 from sklearn.pipeline import Pipeline
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.ensemble import RandomForestClassifier
+from sklearn.feature_selection import SequentialFeatureSelector
 
 
 
@@ -39,7 +40,7 @@ def main(cwd_path: Path, logger: logging.Logger) -> None:
     logger.info("reding training file")
     df_train = pd.read_csv(train_data_path).drop(["obj_ID", "run_ID", "rerun_ID", "cam_col", "field_ID", "spec_obj_ID", "plate", "MJD", "fiber_ID"], axis=1)
     df_train["class"] = df_train["class"].map({"GALAXY": 0, "QSO": 1, "STAR": 2})
-    logger.info("remapping of class data {\"GALAXY\": 0, \"STAR\": 1, \"QSO\": 2}")
+    logger.info("remapping of class data {\"GALAXY\": 0, \"QSO\": 1, \"STAR\": 2}")
     logger.info("reding test file")
     df_test = pd.read_csv(test_data_path).drop(["obj_ID", "run_ID", "rerun_ID", "cam_col", "field_ID", "spec_obj_ID", "plate", "MJD", "fiber_ID"], axis=1)
 
@@ -52,7 +53,7 @@ def main(cwd_path: Path, logger: logging.Logger) -> None:
         logger.warning("%s file exist skipping pair plot", pairplot_file)
     else:
         logger.info("plotting pairplot")
-        pairplot = sns.pairplot(df_train.sample(1000), hue="class", height=2.0)
+        pairplot = sns.pairplot(df_train, hue="class", height=4.0)
         logger.info("saving plot to file %s", pairplot_file)
         pairplot.savefig(cwd_path / Path(pairplot_file))
         plt.clf()
@@ -67,7 +68,7 @@ def main(cwd_path: Path, logger: logging.Logger) -> None:
     else:
         logger.info("plotting pairplot PCA")
         df_pca["class"] = df_train.dropna()["class"].to_numpy()
-        pairplot = sns.pairplot(df_pca.sample(1000), hue="class", height=2.0)
+        pairplot = sns.pairplot(df_pca, hue="class", height=4.0)
         logger.info("saving plot to file %s", pairplot_PCA_file)
         pairplot.savefig(cwd_path / Path(pairplot_PCA_file))
         plt.clf()
@@ -115,28 +116,37 @@ def main(cwd_path: Path, logger: logging.Logger) -> None:
     else:
         logger.info("creating grid search")
         logger.info("setting upp parameters")
-        param_SVC_C = np.logspace(-2,3,50).tolist()
+        param_SVC_C = np.logspace(-1,2.8,25).tolist()
         param_RFC_n_estimator = np.linspace(10, 50,10).astype(int).tolist()
         param_RFC_max_depth = np.linspace(2, 50, 10).astype(int).tolist()
         param_KNN_n_neighbors = np.linspace(2, 10, 8).astype(int).tolist()
 
+        pca = PCA(n_components=5)
+        lda = LinearDiscriminantAnalysis()
+        sfs = SequentialFeatureSelector(LogisticRegression())
+        preprocessoer = [pca, lda]
+
         param_grid = [
+            # {
+            #     'preprocessoer': preprocessoer,
+            #     'classifier': [svm.SVC()],
+            #     'classifier__C': param_SVC_C,
+            #     'classifier__kernel': ['rbf', 'poly'],
+            # },
             {
-                'classifier': [svm.SVC()],
-                'classifier__C': param_SVC_C,
-                'classifier__kernel': ['rbf', 'linear', 'poly'],
-            },
-            {
+                'preprocessoer': preprocessoer,
                 'classifier': [RandomForestClassifier()],
                 'classifier__n_estimators': param_RFC_n_estimator,
                 'classifier__max_depth': param_RFC_max_depth
             },
             {
+                'preprocessoer': preprocessoer,
                 'classifier': [LogisticRegression()],
                 'classifier__C': param_SVC_C,
                 'classifier__solver': ['lbfgs', 'newton-cg', 'newton-cholesky'],
             },
             {
+                'preprocessoer': preprocessoer,
                 'classifier': [KNeighborsClassifier()],
                 'classifier__n_neighbors': param_KNN_n_neighbors,
             }

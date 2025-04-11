@@ -1,6 +1,5 @@
 .venv
 logg.txt
 grid_search_cv*
-pairplot.png
-pairplot_PCA.png
+pairplot*
 kaggle_submition*
